@@ -1,0 +1,274 @@
+<!-- To run the dashboard run 'streamlit run dashboard.py' in terminal-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Plane Crash Survival Prediction</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="top-ribbon">
+    <div class="logo-container">
+      <img src="logo.png" alt="SkySafe Logo" class="logo-img" />
+      <span class="site-title">SkySafe</span>
+      <span class="divider">|</span>
+      <span class="ribbon-phrase">See beyond the impact</span>
+    </div>
+  </div>
+  <div class="container">
+    <div class="left-panel" style="padding-bottom:0;">
+      <div class="input-section" style="display: flex; flex-direction: row; align-items: stretch; justify-content: center; gap: 2.5rem; width: 100%;">
+        <div style="width: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 600px;">
+          <div class="section-ribbon" style="max-width: 340px; margin: 1.5rem auto 2.2rem auto; font-size: 1.7rem; padding: 1.1rem 0; border-radius: 12px;">Survival Prediction</div>
+          <div class="centered-form" style="width: 100%; max-width: 400px; margin: 0 auto;">
+            <form id="prediction-form">
+
+              <label for="flightphase">Flight Phase</label>
+              <select id="flightphase" name="flightphase" required>
+                <option value="" disabled selected hidden>Select Flight Phase</option>
+                <option value="Takeoff">Takeoff</option>
+                <option value="Landing">Landing</option>
+                <option value="En Route">En Route</option>
+              </select>
+
+              <label for="waterbody">Location of crash</label>
+              <select id="waterbody" name="waterbody">
+                <option value="" disabled selected hidden>Select Location</option>
+                <option value="Unknown">Land</option>
+                <option value="Channel">Channel</option>
+                <option value="Gulf">Gulf</option>
+                <option value="Ocean">Ocean</option>
+                <option value="River">River</option>
+                <option value="Sea">Sea</option>
+              </select>
+
+              <label for="weather">Weather Condition</label>
+              <select id="weather" name="weather" required>
+                <option value="" disabled selected hidden>Select Weather Condition</option>
+                <option value="Clear">Clear</option>
+                <option value="Rain">Rain</option>
+                <option value="Fog">Fog</option>
+                <option value="Thunderstorm">Thunderstorm</option>
+                <option value="Snow">Snow</option>
+              </select>
+
+              <label for="dayperiod">Day Period</label>
+              <select id="dayperiod" name="dayperiod" required>
+                <option value="" disabled selected hidden>Select Day Period</option>
+                <option value="Morning">Morning</option>
+                <option value="Afternoon">Afternoon</option>
+                <option value="Evening">Evening</option>
+                <option value="Night">Night</option>
+              </select>
+
+              <label for="causecategory">Possible Cause</label>
+              <select id="causecategory" name="causecategory" required>
+                <option value="" disabled selected hidden>Select Possible Cause</option>
+                <option value="External">External</option>
+                <option value="Human Error">Human Error</option>
+                <option value="Mechanical">Mechanical Failure</option>
+                <option value="Weather">Weather</option>
+              </select>
+
+              <label for="aboard">Number of People Aboard</label>
+              <input type="number" id="aboard" name="aboard" required min="1" />
+
+              <button type="submit" id="submitBtn">Predict Survival</button>
+            </form>
+
+            <div id="result" style="margin-top: 1.1rem;"></div>
+            
+            <!-- Removed prediction-output div as requested -->
+
+          <script>
+            // Configuration
+            const API_BASE_URL = 'http://localhost:5000/api';
+
+            // Main prediction function
+            async function makePrediction() {
+              // Get form data
+              const formData = {
+                flight_phase: document.getElementById('flightphase').value,
+                water_body_type: document.getElementById('waterbody').value,
+                weather_condition: document.getElementById('weather').value,
+                day_period: document.getElementById('dayperiod').value,
+                cause_category: document.getElementById('causecategory').value,
+                aboard: document.getElementById('aboard').value
+              };
+            
+              // Validate form data
+              const requiredFields = ['flight_phase', 'water_body_type', 'weather_condition', 'day_period', 'cause_category', 'aboard'];
+              const missingFields = requiredFields.filter(field => !formData[field]);
+            
+              if (missingFields.length > 0) {
+                showError(`Please fill in all required fields: ${missingFields.join(', ')}`);
+                return;
+              }
+            
+              // Convert aboard to number
+              formData.aboard = parseInt(formData.aboard);
+              if (isNaN(formData.aboard) || formData.aboard <= 0) {
+                showError('Number of people aboard must be a positive number');
+                return;
+              }
+            
+              // Show loading state
+              showLoading(true);
+            
+              try {
+                // Make API call
+                const response = await fetch(`${API_BASE_URL}/predict`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(formData)
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    showPredictionResult(result);
+                } else {
+                    showError(result.error || 'Prediction failed');
+                }
+                
+              } catch (error) {
+                console.error('API Error:', error);
+                showError('Unable to connect to prediction service. Please make sure the API server is running.');
+              } finally {
+                showLoading(false);
+              }
+            }
+
+            // Display prediction results
+            function showPredictionResult(result) {
+              const resultContainer = document.getElementById('result');
+              // Create probability bars HTML
+              let probabilityBars = '';
+              for (const [category, probability] of Object.entries(result.probabilities)) {
+                const percentage = (probability * 100).toFixed(1);
+                probabilityBars += `
+                  <div class="probability-item">
+                    <div class="probability-label">${category}</div>
+                    <div class="probability-bar">
+                      <div class="probability-fill" style="width: ${percentage}%"></div>
+                      <span class="probability-text">${percentage}%</span>
+                    </div>
+                  </div>
+                `;
+              }
+
+              // Always use light blue background, only change font color for outcome, no border
+              let outcomeColor = '#1976d2'; // default blue font
+              if (result.prediction === 'None Survived') {
+                outcomeColor = '#e53935';
+              } else if (result.prediction === 'Partial Survived' || result.prediction === 'All Survived') {
+                outcomeColor = '#1976d2';
+              }
+
+              resultContainer.innerHTML = `
+                <div class="prediction-result success custom-output-style" style="background:#e3f2fd; text-align:center; margin: 0 auto; max-width: 480px; box-shadow: 0 2px 16px rgba(33,150,243,0.10); border:none; margin-bottom:0;">
+                  <h3 style="margin-top: 0;">Prediction Result</h3>
+                  <div class="main-prediction" style="font-size:1.2rem; margin-bottom:0.3rem;">
+                    <strong>Predicted Survival Severity:</strong><br>
+                    <span class="prediction-value" style="color:${outcomeColor}; font-weight:700; font-size:1.25em;">${result.prediction}</span>
+                  </div>
+                  <div class="survival-logic" style="margin-top:0.7rem;">
+                    <h4 style="margin-bottom:0.3rem;">How Survival Outcome is Created</h4>
+                    <ul style="display:inline-block; text-align:left; margin:0 auto; font-size:1rem;">
+                      <li><strong>Fatalities = 0</strong> &rarr; <span style="color:#1976d2; font-weight:600;">All Survived</span></li>
+                      <li><strong>0 &lt; Fatalities &lt; Aboard</strong> &rarr; <span style="color:#1976d2; font-weight:600;">Partial Survived</span></li>
+                      <li><strong>Fatalities = Aboard</strong> &rarr; <span style="color:#1976d2; font-weight:600;">None Survived</span></li>
+                    </ul>
+                  </div>
+                </div>
+              `;
+            }
+
+            // Show error message
+            function showError(message) {
+              const resultContainer = document.getElementById('result');
+              resultContainer.innerHTML = `
+                <div class="prediction-result error custom-output-style" style="background:#ffebee; border:2.5px solid #e53935; text-align:center; margin:0 auto; max-width:480px;">
+                  <h3 style="margin-top:0;">❌ Error</h3>
+                  <p>${message}</p>
+                </div>
+              `;
+            }
+
+            // Show/hide loading state
+            function showLoading(isLoading) {
+              const submitButton = document.getElementById('submitBtn');
+              const resultContainer = document.getElementById('result');
+              submitButton.disabled = isLoading;
+              submitButton.textContent = isLoading ? 'Predicting...' : 'Predict Survival Severity';
+              if (isLoading) {
+                resultContainer.innerHTML = `
+                  <div class="prediction-result loading custom-output-style" style="background:#e3f2fd; border:2.5px solid #2196f3; text-align:center; margin:0 auto; max-width:480px;">
+                    <h3 style="margin-top:0;">🔄 Making Prediction...</h3>
+                    <p>Please wait while we analyze the data...</p>
+                  </div>
+                `;
+              }
+            }
+
+            // Check API health
+            async function checkAPIHealth() {
+              try {
+                const response = await fetch(`${API_BASE_URL}/health`);
+                const result = await response.json();
+                
+                if (result.success && result.model_loaded) {
+                    console.log('✅ API is healthy and model is loaded');
+                    return true;
+                } else {
+                    console.warn('⚠️ API is running but model may not be loaded');
+                    return false;
+                }
+              } catch (error) {
+                console.error('❌ API health check failed:', error);
+                return false;
+              }
+            }
+
+            // Initialize when page loads
+            document.addEventListener('DOMContentLoaded', function() {
+              console.log('🚀 Plane Crash Survival Prediction Frontend Loaded');
+            
+              // Check API health
+              checkAPIHealth();
+            
+              // Attach event listener to form (fix ID to match HTML)
+              const form = document.getElementById('prediction-form');
+              if (form) {
+                form.addEventListener('submit', function(e) {
+                    e.preventDefault();
+                    makePrediction();
+                });
+                console.log('✅ Form event listener attached');
+              } else {
+                console.error('❌ Prediction form not found');
+              }
+            });
+          </script>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="right-panel" style="margin-top: 1.5rem;">
+      <div class="section-ribbon" style="max-width: 540px; margin: 0 auto 1.5rem auto; font-size: 1.7rem; padding: 1.1rem 0; border-radius: 12px;">Aviation Accident Dashboard</div>
+      <iframe src="http://localhost:8501" width="100%" height="900" style="border:none; border-radius: 12px; box-shadow: 0 2px 16px rgba(33,150,243,0.10); margin-top: 1.5rem;"></iframe>
+      
+    </div>
+  </div>
+  <style>
+    .slide-arrow:hover {
+      background: #e0e0e0 !important;
+    }
+  </style>
+
+</body>
+</html>
